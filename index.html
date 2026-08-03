@@ -1,1 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TRYKA Prep Tracker</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #151c2c;
+      --border: #232d42;
+      --accent: #f39c12;
+      --green: #2ecc71;
+      --red: #e74c3c;
+      --text: #ecf0f1;
+      --subtext: #8a99ad;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--bg); color: var(--text); padding-bottom: 40px; }
+
+    header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px; text-align: center; position: sticky; top: 0; z-index: 100; }
+    header h1 { font-size: 1.2rem; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+
+    nav { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
+    nav button { flex: 1; min-width: 65px; padding: 12px 4px; background: none; border: none; color: var(--subtext); font-size: 0.75rem; font-weight: bold; }
+    nav button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+    .container { padding: 16px; max-width: 500px; margin: 0 auto; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+
+    .timer-banner { display: flex; justify-content: space-between; align-items: center; background: #1a2336; border: 1px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+    .timer-display { font-size: 1.5rem; font-weight: bold; font-family: monospace; color: var(--accent); }
+
+    .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: opacity 0.2s; }
+    .btn-start { background: var(--green); color: #000; }
+    .btn-finish { background: var(--red); color: #fff; }
+    .btn-action { background: var(--accent); color: #000; margin-top: 8px; }
+
+    .exercise-title { font-size: 1rem; color: var(--text); margin-bottom: 4px; font-weight: 600; }
+    .exercise-sub { font-size: 0.8rem; color: var(--subtext); margin-bottom: 12px; }
+
+    .set-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .set-row:last-child { border-bottom: none; }
+    .set-info { font-size: 0.85rem; color: var(--subtext); }
+
+    .check-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); background: none; color: transparent; font-size: 1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .check-btn.done { background: var(--green); border-color: var(--green); color: #000; }
+
+    /* Overlay Rest Timer */
+    .rest-overlay { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 460px; background: #1c263b; border: 2px solid var(--accent); border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 200; }
+    .rest-overlay.hidden { display: none; }
+    .rest-time { font-size: 1.4rem; font-weight: bold; font-family: monospace; color: var(--accent); }
+
+    .log-item { border-bottom: 1px solid var(--border); padding: 12px 0; }
+    .log-item:last-child { border-bottom: none; }
+    .log-date { font-size: 0.75rem; color: var(--accent); font-weight: bold; }
+    .log-title { font-size: 0.95rem; font-weight: bold; margin: 2px 0; }
+    .log-detail { font-size: 0.8rem; color: var(--subtext); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>TRYKA Doubles Tracker</h1>
+  </header>
+
+  <nav id="dayNav">
+    <button onclick="switchTab('mon')" id="tab-mon" class="active">MON</button>
+    <button onclick="switchTab('tue')" id="tab-tue">TUE</button>
+    <button onclick="switchTab('wed')" id="tab-wed">WED</button>
+    <button onclick="switchTab('fri')" id="tab-fri">FRI</button>
+    <button onclick="switchTab('sun')" id="tab-sun">SUN</button>
+    <button onclick="switchTab('logs')" id="tab-logs">LOGS</button>
+  </nav>
+
+  <div class="container">
+    
+    <!-- Active Session Header -->
+    <div id="sessionHeader" class="card" style="display:none;">
+      <div class="timer-banner">
+        <span>Session Time</span>
+        <span id="sessionTimer" class="timer-display">00:00</span>
+      </div>
+      <button id="finishBtn" class="btn btn-finish" onclick="finishSession()">Finish & Save Session</button>
+    </div>
+
+    <!-- Start Button Placeholder -->
+    <div id="startBanner" class="card">
+      <button class="btn btn-start" onclick="startSession()">Start Today's Session</button>
+    </div>
+
+    <!-- Dynamic Content Area -->
+    <div id="contentArea"></div>
+
+  </div>
+
+  <!-- Rest Timer Overlay -->
+  <div id="restOverlay" class="rest-overlay hidden">
+    <div>
+      <div style="font-size:0.75rem; color:var(--subtext);">REST TIMER</div>
+      <div id="restCountdown" class="rest-time">01:00</div>
+    </div>
+    <button onclick="skipRest()" style="background:none; border:none; color:var(--subtext); font-size:0.8rem; text-decoration:underline;">Skip Rest</button>
+  </div>
+
+  <script>
+    // App State & Data
+    const workoutPlan = {
+      mon: {
+        title: "Monday: Functional Strength & Power",
+        type: "gym",
+        exercises: [
+          { name: "A1. Dead Treadmill Pushes (or Leg Press)", sets: 4, detail: "30 sec max effort push (or 8 reps heavy)" },
+          { name: "B1. DB Farmer's Carry", sets: 4, detail: "50 meters (45-60s heavy carry)" },
+          { name: "C1. DB / Barbell Thrusters", sets: 3, detail: "10-12 reps (Ram Thruster mimic)" },
+          { name: "C2. Hanging Knee Raises", sets: 3, detail: "15 reps" },
+          { name: "D1. Cable Core Pulls (SkiErg Mimic)", sets: 4, detail: "45 seconds dynamic hinge" }
+        ]
+      },
+      tue: {
+        title: "Tuesday: 5km Pace & Intervals",
+        type: "run",
+        detail: "5km total run distance. Target: Weeks 1-4 sustained pace; Weeks 5+ interval tempo (e.g., 4x800m at race pace)."
+      },
+      wed: {
+        title: "Wednesday: Hybrid Movement & Engine",
+        type: "gym",
+        exercises: [
+          { name: "A1. DB Walking Lunges", sets: 3, detail: "20 paces total (10 per leg)" },
+          { name: "B1. Low Cable Rope Pulls (Sled Pull Mimic)", sets: 4, detail: "60 seconds continuous row" },
+          { name: "C1. Burpee Broad Jumps", sets: 3, detail: "8-10 reps continuous rhythm" },
+          { name: "D1. Gym Engine Finisher", sets: 4, detail: "2 min Spin Bike/Incline Walk + 1 min Cable Rows" }
+        ]
+      },
+      fri: {
+        title: "Friday: Doubles Simulation",
+        type: "gym",
+        exercises: [
+          { name: "Run 400m Treadmill + 60 DB Thrusters", sets: 1, detail: "Split thrusters 10/10 with partner" },
+          { name: "Run 400m Treadmill + 200m Farmer's Carry", sets: 1, detail: "Switch weights when grip fails" },
+          { name: "Run 400m Treadmill + 4m Dead Treadmill Pushes", sets: 1, detail: "Alternate 30s intervals with partner" }
+        ]
+      },
+      sun: {
+        title: "Sunday: 10km+ Long Aerobic Engine",
+        type: "run",
+        detail: "10km+ continuous run at a conversational, Zone 2 pace. Focus on building baseline aerobic capacity and time on feet."
+      }
+    };
+
+    let activeTab = 'mon';
+    let isSessionActive = false;
+    let sessionSeconds = 0;
+    let sessionInterval = null;
+    let restSeconds = 60;
+    let restInterval = null;
+    
+    // Audio Context Setup for Beeps
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playBeep(freq = 600, duration = 0.2) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playDoubleBeep() {
+      playBeep(800, 0.15);
+      setTimeout(() => playBeep(800, 0.25), 200);
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      renderContent();
+    }
+
+    function renderContent() {
+      const area = document.getElementById('contentArea');
+      const startBanner = document.getElementById('startBanner');
+      area.innerHTML = '';
+
+      if (activeTab === 'logs') {
+        startBanner.style.display = 'none';
+        renderLogs(area);
+        return;
+      }
+
+      const dayData = workoutPlan[activeTab];
+      
+      if (dayData.type === 'run') {
+        startBanner.style.display = 'none';
+        area.innerHTML = `
+          <div class="card">
+            <div class="exercise-title">${dayData.title}</div>
+            <div class="exercise-sub" style="margin-top:10px; line-height:1.4;">${dayData.detail}</div>
+            <button class="btn btn-action" onclick="logRun('${dayData.title}')">Mark Run Completed</button>
+          </div>
+        `;
+        return;
+      }
+
+      startBanner.style.display = isSessionActive ? 'none' : 'block';
+
+      let html = `<div class="card"><div class="exercise-title">${dayData.title}</div></div>`;
+      
+      dayData.exercises.forEach((ex, exIndex) => {
+        html += `
+          <div class="card">
+            <div class="exercise-title">${ex.name}</div>
+            <div class="exercise-sub">${ex.detail}</div>
+        `;
+        for (let i = 1; i <= ex.sets; i++) {
+          const setId = `${activeTab}_ex${exIndex}_set${i}`;
+          const isDone = localStorage.getItem(setId) === 'true';
+          html += `
+            <div class="set-row">
+              <span class="set-info">Set ${i}</span>
+              <button class="check-btn ${isDone ? 'done' : ''}" onclick="toggleSet('${setId}')">✓</button>
+            </div>
+          `;
+        }
+        html += `</div>`;
+      });
+
+      area.innerHTML = html;
+    }
+
+    function startSession() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      isSessionActive = true;
+      sessionSeconds = 0;
+      document.getElementById('startBanner').style.display = 'none';
+      document.getElementById('sessionHeader').style.display = 'block';
+      
+      sessionInterval = setInterval(() => {
+        sessionSeconds++;
+        const mins = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
+        const secs = String(sessionSeconds % 60).padStart(2, '0');
+        document.getElementById('sessionTimer').innerText = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function toggleSet(setId) {
+      const currentState = localStorage.getItem(setId) === 'true';
+      const newState = !currentState;
+      localStorage.setItem(setId, newState);
+
+      if (newState && isSessionActive) {
+        startRestTimer();
+      }
+      renderContent();
+    }
+
+    function startRestTimer() {
+      clearInterval(restInterval);
+      restSeconds = 60;
+      const overlay = document.getElementById('restOverlay');
+      const display = document.getElementById('restCountdown');
+      overlay.classList.remove('hidden');
+      display.innerText = "01:00";
+
+      restInterval = setInterval(() => {
+        restSeconds--;
+        const secs = String(restSeconds % 60).padStart(2, '0');
+        display.innerText = `00:${secs}`;
+
+        if (restSeconds === 10) {
+          playBeep(600, 0.4); // Single loud beep at 50s (10s remaining)
+        }
+
+        if (restSeconds <= 0) {
+          clearInterval(restInterval);
+          playDoubleBeep(); // Double beep at 60s
+          setTimeout(() => overlay.classList.add('hidden'), 1000);
+        }
+      }, 1000);
+    }
+
+    function skipRest() {
+      clearInterval(restInterval);
+      document.getElementById('restOverlay').classList.add('hidden');
+    }
+
+    function finishSession() {
+      clearInterval(sessionInterval);
+      isSessionActive = false;
+      const timeFormatted = document.getElementById('sessionTimer').innerText;
+      
+      saveLog(workoutPlan[activeTab].title, `Gym Session - Time: ${timeFormatted}`);
+
+      // Clear checked sets for this tab
+      const dayData = workoutPlan[activeTab];
+      dayData.exercises.forEach((ex, exIndex) => {
+        for (let i = 1; i <= ex.sets; i++) {
+          localStorage.removeItem(`${activeTab}_ex${exIndex}_set${i}`);
+        }
+      });
+
+      document.getElementById('sessionHeader').style.display = 'none';
+      alert(`Workout logged! Total Time: ${timeFormatted}`);
+      switchTab('logs');
+    }
+
+    function logRun(runTitle) {
+      saveLog(runTitle, "Completed outdoor/treadmill run.");
+      alert("Run logged successfully!");
+      switchTab('logs');
+    }
+
+    function saveLog(title, detail) {
+      const logs = JSON.parse(localStorage.getItem('tryka_logs') || '[]');
+      const newLog = {
+        date: new Date().toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }),
+        title: title,
+        detail: detail
+      };
+      logs.unshift(newLog);
+      localStorage.setItem('tryka_logs', JSON.stringify(logs));
+    }
+
+    function renderLogs(container) {
+      const logs = JSON.parse(localStorage.getItem('tryka_logs') || '[]');
+      if (logs.length === 0) {
+        container.innerHTML = `<div class="card"><div class="exercise-sub">No completed sessions logged yet.</div></div>`;
+        return;
+      }
+
+      let html = `<div class="card">`;
+      logs.forEach(log => {
+        html += `
+          <div class="log-item">
+            <div class="log-date">${log.date}</div>
+            <div class="log-title">${log.title}</div>
+            <div class="log-detail">${log.detail}</div>
+          </div>
+        `;
+      });
+      html += `</div><button class="btn btn-finish" style="margin-top:10px;" onclick="clearLogs()">Clear All Logs</button>`;
+      container.innerHTML = html;
+    }
+
+    function clearLogs() {
+      if (confirm("Delete all workout logs?")) {
+        localStorage.removeItem('tryka_logs');
+        renderContent();
+      }
+    }
+
+    // Set default tab on launch to today's scheduled day
+    const dayMap = { 1: 'mon', 2: 'tue', 3: 'wed', 5: 'fri', 0: 'sun' };
+    const today = new Date().getDay();
+    if (dayMap[today]) switchTab(dayMap[today]);
+    else renderContent();
+  </script>
+</body>
+</html>
 
