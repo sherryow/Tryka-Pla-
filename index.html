@@ -40,11 +40,15 @@
     .exercise-title { font-size: 1rem; color: var(--text); margin-bottom: 4px; font-weight: 600; }
     .exercise-sub { font-size: 0.8rem; color: var(--subtext); margin-bottom: 12px; }
 
-    .set-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .set-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
     .set-row:last-child { border-bottom: none; }
-    .set-info { font-size: 0.85rem; color: var(--subtext); }
+    .set-info { font-size: 0.85rem; color: var(--subtext); width: 45px; }
 
-    .check-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); background: none; color: transparent; font-size: 1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .input-group { display: flex; gap: 6px; align-items: center; }
+    .set-input { width: 62px; background: #0d1321; border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 4px; text-align: center; font-size: 0.85rem; }
+    .set-input:focus { border-color: var(--accent); outline: none; }
+
+    .check-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); background: none; color: transparent; font-size: 1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
     .check-btn.done { background: var(--green); border-color: var(--green); color: #000; }
 
     /* Overlay Rest Timer */
@@ -56,7 +60,7 @@
     .log-item:last-child { border-bottom: none; }
     .log-date { font-size: 0.75rem; color: var(--accent); font-weight: bold; }
     .log-title { font-size: 0.95rem; font-weight: bold; margin: 2px 0; }
-    .log-detail { font-size: 0.8rem; color: var(--subtext); }
+    .log-detail { font-size: 0.8rem; color: var(--subtext); white-space: pre-line; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -105,7 +109,6 @@
   </div>
 
   <script>
-    // App State & Data
     const workoutPlan = {
       mon: {
         title: "Monday: Functional Strength & Power",
@@ -156,7 +159,6 @@
     let restSeconds = 60;
     let restInterval = null;
     
-    // Audio Context Setup for Beeps
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playBeep(freq = 600, duration = 0.2) {
@@ -177,10 +179,33 @@
       setTimeout(() => playBeep(800, 0.25), 200);
     }
 
+    // Check for existing active session state on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedSession = localStorage.getItem('tryka_active_session');
+      if (savedSession) {
+        const data = JSON.parse(savedSession);
+        isSessionActive = true;
+        activeTab = data.tab;
+        
+        // Calculate elapsed time even if closed/backgrounded
+        const elapsed = Math.floor((Date.now() - data.startTime) / 1000);
+        sessionSeconds = elapsed;
+        
+        resumeSessionTimer();
+      }
+
+      const dayMap = { 1: 'mon', 2: 'tue', 3: 'wed', 5: 'fri', 0: 'sun' };
+      const today = new Date().getDay();
+      if (!savedSession && dayMap[today]) activeTab = dayMap[today];
+
+      switchTab(activeTab);
+    });
+
     function switchTab(tab) {
       activeTab = tab;
       document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-      document.getElementById(`tab-${tab}`).classList.add('active');
+      const activeBtn = document.getElementById(`tab-${tab}`);
+      if (activeBtn) activeBtn.classList.add('active');
       renderContent();
     }
 
@@ -222,9 +247,16 @@
         for (let i = 1; i <= ex.sets; i++) {
           const setId = `${activeTab}_ex${exIndex}_set${i}`;
           const isDone = localStorage.getItem(setId) === 'true';
+          const savedWeight = localStorage.getItem(`${setId}_weight`) || '';
+          const savedReps = localStorage.getItem(`${setId}_reps`) || '';
+
           html += `
             <div class="set-row">
               <span class="set-info">Set ${i}</span>
+              <div class="input-group">
+                <input type="number" class="set-input" placeholder="kg" value="${savedWeight}" oninput="saveInput('${setId}_weight', this.value)">
+                <input type="number" class="set-input" placeholder="reps" value="${savedReps}" oninput="saveInput('${setId}_reps', this.value)">
+              </div>
               <button class="check-btn ${isDone ? 'done' : ''}" onclick="toggleSet('${setId}')">✓</button>
             </div>
           `;
@@ -235,18 +267,43 @@
       area.innerHTML = html;
     }
 
+    function saveInput(key, value) {
+      localStorage.setItem(key, value);
+    }
+
     function startSession() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       isSessionActive = true;
       sessionSeconds = 0;
+      
+      // Store session metadata to survive tab/app closing
+      const sessionData = {
+        startTime: Date.now(),
+        tab: activeTab
+      };
+      localStorage.setItem('tryka_active_session', JSON.stringify(sessionData));
+
+      resumeSessionTimer();
+      renderContent();
+    }
+
+    function resumeSessionTimer() {
       document.getElementById('startBanner').style.display = 'none';
       document.getElementById('sessionHeader').style.display = 'block';
       
-      sessionInterval = setInterval(() => {
-        sessionSeconds++;
+      clearInterval(sessionInterval);
+      
+      const updateDisplay = () => {
         const mins = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
         const secs = String(sessionSeconds % 60).padStart(2, '0');
         document.getElementById('sessionTimer').innerText = `${mins}:${secs}`;
+      };
+      
+      updateDisplay();
+      
+      sessionInterval = setInterval(() => {
+        sessionSeconds++;
+        updateDisplay();
       }, 1000);
     }
 
@@ -275,12 +332,12 @@
         display.innerText = `00:${secs}`;
 
         if (restSeconds === 10) {
-          playBeep(600, 0.4); // Single loud beep at 50s (10s remaining)
+          playBeep(600, 0.4);
         }
 
         if (restSeconds <= 0) {
           clearInterval(restInterval);
-          playDoubleBeep(); // Double beep at 60s
+          playDoubleBeep();
           setTimeout(() => overlay.classList.add('hidden'), 1000);
         }
       }, 1000);
@@ -296,18 +353,41 @@
       isSessionActive = false;
       const timeFormatted = document.getElementById('sessionTimer').innerText;
       
-      saveLog(workoutPlan[activeTab].title, `Gym Session - Time: ${timeFormatted}`);
-
-      // Clear checked sets for this tab
+      // Build detailed summary of weight & reps for logs
+      let logSummary = `Time: ${timeFormatted}\n`;
       const dayData = workoutPlan[activeTab];
+
+      dayData.exercises.forEach((ex, exIndex) => {
+        let exDetails = [];
+        for (let i = 1; i <= ex.sets; i++) {
+          const setId = `${activeTab}_ex${exIndex}_set${i}`;
+          const isDone = localStorage.getItem(setId) === 'true';
+          if (isDone) {
+            const weight = localStorage.getItem(`${setId}_weight`) || '-';
+            const reps = localStorage.getItem(`${setId}_reps`) || '-';
+            exDetails.push(`  • Set ${i}: ${weight}kg x ${reps} reps`);
+          }
+        }
+        if (exDetails.length > 0) {
+          logSummary += `\n${ex.name}:\n` + exDetails.join('\n');
+        }
+      });
+
+      saveLog(dayData.title, logSummary);
+
+      // Cleanup local state for current day
+      localStorage.removeItem('tryka_active_session');
       dayData.exercises.forEach((ex, exIndex) => {
         for (let i = 1; i <= ex.sets; i++) {
-          localStorage.removeItem(`${activeTab}_ex${exIndex}_set${i}`);
+          const setId = `${activeTab}_ex${exIndex}_set${i}`;
+          localStorage.removeItem(setId);
+          localStorage.removeItem(`${setId}_weight`);
+          localStorage.removeItem(`${setId}_reps`);
         }
       });
 
       document.getElementById('sessionHeader').style.display = 'none';
-      alert(`Workout logged! Total Time: ${timeFormatted}`);
+      alert(`Workout finished and logged!\nTotal Time: ${timeFormatted}`);
       switchTab('logs');
     }
 
@@ -355,13 +435,6 @@
         renderContent();
       }
     }
-
-    // Set default tab on launch to today's scheduled day
-    const dayMap = { 1: 'mon', 2: 'tue', 3: 'wed', 5: 'fri', 0: 'sun' };
-    const today = new Date().getDay();
-    if (dayMap[today]) switchTab(dayMap[today]);
-    else renderContent();
   </script>
 </body>
 </html>
-
